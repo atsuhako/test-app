@@ -1,0 +1,106 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>com.spawar.app</groupId>
+  <artifactId>test-app</artifactId>
+  <packaging>jar</packaging>
+  <version>1.0-SNAPSHOT</version>
+  <name>test-app</name>
+  <url>http://maven.apache.org</url>
+  <dependencies>
+		<!--dependency>
+			<groupId>com.tinkerpop.blueprints</groupId>
+			<artifactId>blueprints-core</artifactId>
+			<version>2.6.0</version>
+		</dependency-->
+
+		<dependency>
+			<groupId>org.apache.accumulo</groupId>
+			<artifactId>accumulo-core</artifactId>
+			<version>1.6.2</version>
+		</dependency>
+		<dependency>
+			<groupId>org.apache.hadoop</groupId>
+			<artifactId>hadoop-core</artifactId>
+			<version>1.2.1</version>
+		</dependency>
+		<dependency>
+			<groupId>org.apache.zookeeper</groupId>
+			<artifactId>zookeeper</artifactId>
+			<version>3.4.6</version>
+		</dependency>		
+		<dependency>
+			<groupId>com.tinkerpop</groupId>
+			<artifactId>tinkergraph-gremlin</artifactId>
+			<version>3.0.0.M7</version>
+		</dependency>
+		<dependency>
+			<groupId>edu.jhuapl.tinkerpop</groupId>
+			<artifactId>blueprints-accumulo-graph</artifactId>
+			<version>0.2.1</version>
+		</dependency>
+		<dependency>
+			<groupId>commons-configuration</groupId>
+			<artifactId>commons-configuration</artifactId>
+			<version>1.6</version>
+		</dependency>
+
+    <dependency>
+      <groupId>junit</groupId>
+      <artifactId>junit</artifactId>
+      <version>3.8.1</version>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+	<build>    
+		<plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-javadoc-plugin</artifactId>
+        <version>2.10.1</version>
+      </plugin>
+
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-jar-plugin</artifactId>
+				<version>2.6</version>
+				<configuration>
+					<archive>
+						<manifest>
+							<mainClass>com.spawar.app.App</mainClass>
+						</manifest>
+					</archive>
+				</configuration>
+			</plugin>
+			
+		<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-assembly-plugin</artifactId>
+				<version>2.4.1</version>
+				<configuration>
+					<!-- get all project dependencies -->
+					<descriptorRefs>
+						<descriptorRef>jar-with-dependencies</descriptorRef>
+					</descriptorRefs>
+					<!-- MainClass in mainfest make a executable jar -->
+					<archive>
+					  <manifest>
+						<mainClass>com.spawar.app.App</mainClass>
+					  </manifest>
+					</archive>
+ 
+				</configuration>
+				<executions>
+				  <execution>
+					<id>make-assembly</id>
+                                        <!-- bind to the packaging phase -->
+					<phase>package</phase> 
+					<goals>
+						<goal>single</goal>
+					</goals>
+				  </execution>
+				</executions>
+			</plugin>
+		</plugins>
+	</build>  
+</project>
