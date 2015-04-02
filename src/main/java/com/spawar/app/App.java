@@ -9,6 +9,7 @@ import java.util.regex.Pattern;
 import java.util.Iterator;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.ArrayList;
 
 import org.neo4j.graphdb.GraphDatabaseService;
 import org.neo4j.graphdb.Label;
@@ -23,7 +24,7 @@ import org.neo4j.tooling.GlobalGraphOperations;
 import org.neo4j.graphdb.Direction;
 import org.neo4j.unsafe.batchinsert.BatchInserter;
 import org.neo4j.unsafe.batchinsert.BatchInserters;
-
+import org.neo4j.graphdb.Result;
 import java.text.NumberFormat;
 import java.text.DecimalFormat;
 
@@ -39,7 +40,6 @@ public class App {
 	public static void main(String[] args) {
 		//testAccumuloGraph();
 		testNeo4j();
-		testNeo4jBatchInsert(5);
 
 		System.out.println("Hello World!");
 	} //end of main
@@ -64,9 +64,9 @@ public class App {
 	} //end of testAccumuloGraph
 
 	private static void testNeo4j() {
-		NumberFormat nf = new DecimalFormat("###,###,##0.00");
+		NumberFormat nf = new DecimalFormat("###,###,##0");
 
-		GraphDatabaseService graphDb = new GraphDatabaseFactory().newEmbeddedDatabase("C:/Users/Anthony/Documents/Neo4j/default.graphdb");
+		GraphDatabaseService graphDb = new GraphDatabaseFactory().newEmbeddedDatabase("C:/db_neo4j/btree2.graphdb");
 		registerShutdownHook(graphDb);
 
 		System.out.println("Total nodes at startup: " + getAllNodeCnt(graphDb));
@@ -74,22 +74,32 @@ public class App {
 
 		long startTime = System.nanoTime();
 
-		//find root
-		Node root = findOrCreateNode(graphDb, MyLabels.ROOT, "name", "k4");
-
 		// operations on the graph
+
+/*
 		long startTime1 = System.nanoTime();
+		Node root = findOrCreateNode(graphDb, MyLabels.ROOT, "name", "k4");
 		createChildRecords(graphDb, root, 3);
 		System.out.println();
 		long estimatedTime1 = System.nanoTime() - startTime1;
-		System.out.println("Elapsed Time (1): " + nf.format(estimatedTime1/(long)1000000000) + " nanoseconds");
+		System.out.println("Elapsed Time (1): " + nf.format(estimatedTime1/(long)1000000000) + " seconds");
+*/
 
+/*
 		long startTime2 = System.nanoTime();
+		Node root = findOrCreateNode(graphDb, MyLabels.ROOT, "name", "k4");
 		createChildRecords2(graphDb, root, 2);
 		System.out.println();
 		long estimatedTime2 = System.nanoTime() - startTime2;
-		System.out.println("Elapsed Time (2): " + nf.format(estimatedTime2/(long)1000000000) + " nanoseconds");
+		System.out.println("Elapsed Time (2): " + nf.format(estimatedTime2/(long)1000000000) + " seconds");
+*/
 
+		long startTime3 = System.nanoTime();
+		long rootId = findOrCreateNodeId(graphDb, MyLabels.ROOT, "name", "k4");
+		createChildRecords3(graphDb, rootId, "", 3);
+		System.out.println();
+		long estimatedTime3 = System.nanoTime() - startTime3;
+		System.out.println("Elapsed Time (3): " + nf.format(estimatedTime3/(long)1000000000) + " seconds");
 
 		long estimatedTime = System.nanoTime() - startTime;
 		System.out.println("Elapsed Time: " + nf.format(estimatedTime/(long)1000000000) + " seconds");
@@ -110,7 +120,9 @@ public class App {
 			for (Node n : ggops.getAllNodes()) {
 				nodeCnt++;
 			} //end of for
-			} catch (Exception e) {
+			tx.success();
+
+		} catch (Exception e) {
 			e.printStackTrace();
 		} //end of catch
 
@@ -126,7 +138,9 @@ public class App {
 			for (Relationship n : ggops.getAllRelationships()) {
 				relCnt++;
 			} //end of for
-			} catch (Exception e) {
+
+			tx.success();
+		} catch (Exception e) {
 			e.printStackTrace();
 		} //end of catch
 
@@ -136,21 +150,35 @@ public class App {
 	private static Node findOrCreateNode(GraphDatabaseService graphDb, Label label, String key, String value) {
 		Node returnNode = null;
 
-		try (Transaction tx = graphDb.beginTx(); ResourceIterator<Node> iterator = graphDb.findNodesByLabelAndProperty(label, key, value).iterator()) {
-			if (iterator.hasNext()) {
-				returnNode = iterator.next();
-			} else {
+		try (Transaction tx = graphDb.beginTx()) {
+			returnNode = graphDb.findNode(label, key, value);
+			if (returnNode == null) {
 				returnNode = graphDb.createNode(label);
 				returnNode.setProperty(key, value);
 			} //end of else
 
 			tx.success();
-		} catch (Exception e) {
-			e.printStackTrace();
-		} //end of finally
+		} //end of try
 
 		return returnNode;
 	} //end of findOrCreateNode
+
+	private static long findOrCreateNodeId(GraphDatabaseService graphDb, Label label, String key, String value) {
+		long nodeId = -1;
+
+		try (Transaction tx = graphDb.beginTx()) {
+			Node returnNode = graphDb.findNode(label, key, value);
+			if (returnNode == null) {
+				returnNode = graphDb.createNode(label);
+				returnNode.setProperty(key, value);
+			} //end of else
+
+			nodeId = returnNode.getId();
+			tx.success();
+		} //end of try
+
+		return nodeId;
+	} //end of findOrCreateNodeId
 
 	private static void createChildRecords(GraphDatabaseService graphDb, Node parentNode, int maxDepth) {
 		for (char c : "abcdefghijklmnopqrstuvwxyz".toCharArray()) {
@@ -167,7 +195,6 @@ public class App {
 					Node currNode = iterator.next().getEndNode();
 					if (currNode.getProperty("key").equals(key)) {
 						childNode = currNode;
-//						System.out.print("e");
 					} //end of if
 				} //end of while
 
@@ -176,73 +203,64 @@ public class App {
 					childNode.setProperty("key", key);
 					childNode.setProperty("processed", false);
 					parentNode.createRelationshipTo(childNode, MyRels.PARENT_OF);
-					System.out.print(".");
 				} //end of if
 
 				tx.success();
-			} catch (Exception e) {
-				e.printStackTrace();
-			} //end of catch
+			} //end of try
 
 			// Recursively create children til max depth
 			if (key.length() < maxDepth) createChildRecords(graphDb, childNode, maxDepth);
+			//if (key.length() == 1) System.out.print(key);
 		} //end of for
 	} //end of createChildRecords
-
-	private static void testNeo4jBatchInsert(int maxDepth) {
-		BatchInserter inserter = null;
-		try {
-			inserter = BatchInserters.inserter("C:/db_neo4j/testbatch.graphdb");
-			Map<String, Object> properties = new HashMap<>();
-
-			properties.put("key", "aaa");
-			long mattiasNode = inserter.createNode(properties, MyLabels.KEY);
-
-			properties.put("key", "bbb");
-			long chrisNode = inserter.createNode(properties, MyLabels.KEY);
-
-			inserter.createRelationship(mattiasNode, chrisNode, MyRels.PARENT_OF, null);
-		} finally {
-			if (inserter != null) {
-				inserter.shutdown();
-			} //end of if
-		} //end of finally
-	} //end of testNeo4jBatchInsert
 
 	private static void createChildRecords2(GraphDatabaseService graphDb, Node parentNode, int maxDepth) {
 		for (char c : "abcdefghijklmnopqrstuvwxyz".toCharArray()) {
 			Node childNode = null;
-			ResourceIterator<Node> iterator = null;
 			String key = null;
-
 
 			try (Transaction tx = graphDb.beginTx()) {
 				key = (parentNode.hasLabel(MyLabels.ROOT) ? "" : parentNode.getProperty("key")) + String.valueOf(c);
-				iterator = graphDb.findNodesByLabelAndProperty(MyLabels.KEY, "key", key).iterator();
+				childNode = graphDb.findNode(MyLabels.KEY, "key", key);
 
-				if (iterator.hasNext()) {
-//					System.out.print("g");
-					childNode = iterator.next();
-				} else {
+				if (childNode == null) {
 					childNode = graphDb.createNode(MyLabels.KEY);
 					childNode.setProperty("key", key);
 					childNode.setProperty("processed", false);
 					parentNode.createRelationshipTo(childNode, MyRels.PARENT_OF);
-
-					System.out.print(".");
 				} //end of else
 
 				tx.success();
-			} catch (Exception e) {
-				e.printStackTrace();
-			} finally {
-				iterator.close();
-			} //end of finally
+			} //end of try
 
 			// Recursively create children til max depth
 			if (key.length() < maxDepth) createChildRecords2(graphDb, childNode, maxDepth);
 		} //end of for
 	} //end of createChildRecords2
+
+	private static void createChildRecords3(GraphDatabaseService graphDb, long parentId, String parentKey, int maxDepth) {
+		StringBuffer cqlStmt = new StringBuffer("MATCH (p) WHERE id(p) = " + parentId);
+		ArrayList<Map<String, Object>> resultList = new ArrayList<Map<String, Object>>();
+		for (char c : "abcdefghijklmnopqrstuvwxyz".toCharArray()) {
+			String key = parentKey + String.valueOf(c);
+			cqlStmt.append(" CREATE UNIQUE (p)-[:PARENT_OF]->(:KEY{ name:'" + key + "'})");
+		} //end of for
+		cqlStmt.append(" WITH p");
+		cqlStmt.append(" MATCH (p)-[:PARENT_OF]->(c) RETURN id(c), c.name");
+
+		try ( Transaction tx = graphDb.beginTx();Result result = graphDb.execute(cqlStmt.toString()) ) {
+     	while ( result.hasNext() ){
+				resultList.add(result.next());
+     	} //end of while
+     	tx.success();
+		} //end of try
+
+		if (parentKey.length() + 1 < maxDepth) {
+			for (Map<String, Object> row : resultList) {
+				createChildRecords3(graphDb, Long.parseLong(String.valueOf(row.get("id(c)"))), String.valueOf(row.get("c.name")), maxDepth);
+			} //end of for
+		} //end of if
+	} //end of createChildRecords3
 
 	private static void registerShutdownHook(final GraphDatabaseService graphDb) {
 		// Registers a shutdown hook for the Neo4j instance so that it
