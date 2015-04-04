@@ -14,12 +14,13 @@
 			<version>2.2.0</version>
 		</dependency>
 
-		<dependency>
+		<!--dependency>
 			<groupId>org.xerial</groupId>
 			<artifactId>sqlite-jdbc</artifactId>
 			<version>3.8.7</version>
-		</dependency>
+		</dependency-->
 
+<!--
 		<dependency>
 			<groupId>org.apache.hadoop</groupId>
 			<artifactId>hadoop-core</artifactId>
@@ -36,6 +37,7 @@
 			<artifactId>blueprints-accumulo-graph</artifactId>
 			<version>0.2.1</version>
 		</dependency>
+-->
 
 		<!--dependency>
 			<groupId>commons-configuration</groupId>
