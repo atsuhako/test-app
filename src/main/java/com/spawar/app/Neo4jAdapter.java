@@ -34,7 +34,7 @@ import org.neo4j.graphdb.Path;
  */
 public class Neo4jAdapter {
 	private GraphDatabaseService graphDb;
-	private enum MyLabels implements Label { ROOT, KEY; }
+	private enum MyLabels implements Label { ROOT, KEY, UNPROCESSED, PROCESSED; }
 	private enum MyRels implements RelationshipType { PARENT_OF }
 	private int createdCnt = 0;
 
@@ -72,12 +72,11 @@ public class Neo4jAdapter {
 			TraversalDescription unprocessedTraversal = this.graphDb.traversalDescription()
 						.depthFirst()
 						.evaluator(Evaluators.fromDepth(1))
-						.evaluator(Evaluators.toDepth(2))
 						.relationships(MyRels.PARENT_OF, Direction.OUTGOING)
 						.evaluator( new Evaluator() {
 							@Override
 							public Evaluation evaluate(Path path) {
-								boolean endNodeIsProcessed = path.endNode().hasProperty("processed") && (boolean)path.endNode().getProperty("processed");
+								boolean endNodeIsProcessed = path.endNode().hasLabel(MyLabels.PROCESSED);
 								return endNodeIsProcessed ? Evaluation.EXCLUDE_AND_CONTINUE : Evaluation.INCLUDE_AND_CONTINUE;
 							}
 						});
@@ -86,7 +85,8 @@ public class Neo4jAdapter {
 
 			while (iterator.hasNext() && traversedCnt < 1000) {
 				Node currNode = iterator.next();
-				currNode.setProperty("processed", true);
+				currNode.addLabel(MyLabels.PROCESSED);
+//				currNode.setProperty("processed", true);
 				traversedCnt++;
 			} //end of while
 
@@ -147,6 +147,39 @@ public class Neo4jAdapter {
 
 		return nodeCnt;
 	} //end of getAllNodeCnt
+
+	public long getProcessedCnt() {
+		long nodeCnt = 0;
+		ResourceIterator<Node> iterator = null;
+
+		try (Transaction tx = this.graphDb.beginTx()) {
+			iterator = graphDb.findNodes(MyLabels.PROCESSED);
+			while (iterator.hasNext()) {
+				iterator.next();
+				nodeCnt++;
+			} //end of while
+			tx.success();
+		} finally {
+			iterator.close();
+		} //end of try
+
+		return nodeCnt;
+	} //end of getProcessedCnt
+
+	public long getProcessedCnt2() {
+		long nodeCnt = 0;
+
+		try ( Transaction tx = this.graphDb.beginTx();Result result = this.graphDb.execute("MATCH (c:PROCESSED) RETURN c") ) {
+     	while (result.hasNext()) {
+				result.next();
+				nodeCnt++;
+				if (nodeCnt % 1000 == 0) System.gc(); // Run Garbage Collector every 1000 nodes
+     	} //end of while
+     	tx.success();
+		} //end of try
+
+		return nodeCnt;
+	} //end of getProcessedCnt2
 
 	@Deprecated public long getUnprocessedCnt(long rootId) {
 		long nodeCnt = 0;

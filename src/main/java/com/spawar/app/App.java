@@ -72,6 +72,16 @@ public class App {
 
 		System.out.println("Total nodes at startup: " + nf.format(neo4jDb.getAllNodeCnt()));
 
+		long startTime1 = System.nanoTime();
+		System.out.println("Total nodes PROCESSED at startup: " + nf.format(neo4jDb.getProcessedCnt()));
+		long elapsedTime1 = System.nanoTime() - startTime1;
+		System.out.println("Elapsed Time: " + nf.format(elapsedTime1/(long)1000000000) + " seconds");
+
+		long startTime2 = System.nanoTime();
+		System.out.println("Total nodes PROCESSED at startup: " + nf.format(neo4jDb.getProcessedCnt2()));
+		long elapsedTime2 = System.nanoTime() - startTime2;
+		System.out.println("Elapsed Time: " + nf.format(elapsedTime2/(long)1000000000) + " seconds");
+
 		// operations on the graph
 		long startTime = System.nanoTime();
 
@@ -79,7 +89,7 @@ public class App {
 		long rootId = neo4jDb.findOrCreateNodeId(MyLabels.ROOT, "name", "k4");
 
 		// Create child records up to depth x
-		neo4jDb.createAlphaTree(root, 4);
+		//neo4jDb.createChildRecords(rootId, 3);
 
 		// Traverse all nodes
 		neo4jDb.traverseAll(root);
@@ -87,6 +97,8 @@ public class App {
 		long elapsedTime = System.nanoTime() - startTime;
 		System.out.println("Elapsed Time: " + nf.format(elapsedTime/(long)1000000000) + " seconds");
 
+
+		System.out.println("Total nodes PROCESSED at shutdown: " + nf.format(neo4jDb.getProcessedCnt()));
 		System.out.println("Total nodes at shutdown: " + nf.format(neo4jDb.getAllNodeCnt()));
 	} //end of testNeo4jAdapter
 } //end of class
