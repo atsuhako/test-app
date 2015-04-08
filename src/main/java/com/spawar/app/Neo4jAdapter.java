@@ -37,6 +37,7 @@ public class Neo4jAdapter {
 	private enum MyLabels implements Label { ROOT, KEY, UNPROCESSED, PROCESSED; }
 	private enum MyRels implements RelationshipType { PARENT_OF }
 	private int createdCnt = 0;
+	NumberFormat nf = new DecimalFormat("###,###,##0");
 
 	public Neo4jAdapter(String filePath) {
 		this.graphDb = new GraphDatabaseFactory().newEmbeddedDatabase(filePath);
@@ -48,90 +49,109 @@ public class Neo4jAdapter {
 		registerShutdownHook(graphDb);
 	} //end of Neo4jAdapter
 
-	public long traverseAll(Node startNode) {
-		long nodeCnt = 0;
-
-		System.out.print("Traversing (v1 logic)...");
-
+	public long traverseAll() {
 		long traversedCnt = 0;
-		while ((traversedCnt = traverseBatch(startNode)) > 0) {
-			nodeCnt += traversedCnt;
-			System.out.println(nodeCnt + " nodes traversed");
-		} //end of while
-
-		System.out.println(" Done!");
-
-		return nodeCnt;
-	} //end of traverseAll
-
-	public long traverseBatch(Node startNode) {
-		long traversedCnt = 0;
+		Node startNode = findOrCreateNode(MyLabels.ROOT, "name", "root");
 		ResourceIterator<Node> iterator = null;
 
 		try (Transaction tx = this.graphDb.beginTx()) {
 			TraversalDescription unprocessedTraversal = this.graphDb.traversalDescription()
-						.depthFirst()
+						.breadthFirst()
 						.evaluator(Evaluators.fromDepth(1))
 						.relationships(MyRels.PARENT_OF, Direction.OUTGOING)
 						.evaluator( new Evaluator() {
 							@Override
 							public Evaluation evaluate(Path path) {
-								boolean endNodeIsProcessed = path.endNode().hasLabel(MyLabels.PROCESSED);
-								return endNodeIsProcessed ? Evaluation.EXCLUDE_AND_CONTINUE : Evaluation.INCLUDE_AND_CONTINUE;
+								return path.endNode().hasLabel(MyLabels.PROCESSED) ? Evaluation.EXCLUDE_AND_CONTINUE : Evaluation.INCLUDE_AND_CONTINUE;
 							}
 						});
 
 			iterator = unprocessedTraversal.traverse(startNode).nodes().iterator();
 
-			while (iterator.hasNext() && traversedCnt < 1000) {
+			System.out.println("Traversing (v1 logic)...");
+
+			while (iterator.hasNext()) {
 				Node currNode = iterator.next();
 				currNode.addLabel(MyLabels.PROCESSED);
-//				currNode.setProperty("processed", true);
+				traversedCnt++;
+				if (traversedCnt % 1000 == 0) {
+					tx.success();
+					System.gc();
+					System.out.print("\r" + nf.format(createdCnt) + " nodes traversed");
+				} //end of if
+			} //end of while
+		} finally {
+			iterator.close();
+		} //end of try
+
+		System.out.println("Done!");
+
+		return traversedCnt;
+	} //end of traverseAll
+
+	//This will go to the childless nodes and build tree from there
+	public long createKeyTree(int maxDepth) {
+		long traversedCnt = 0;
+		ResourceIterator<Node> iterator = null;
+
+		Node startNode = findOrCreateNode(MyLabels.ROOT, "name", "root");
+
+		try (Transaction tx = this.graphDb.beginTx()) {
+			TraversalDescription unprocessedTraversal = this.graphDb.traversalDescription()
+						.breadthFirst()
+						.evaluator(Evaluators.fromDepth(0))
+						.evaluator(Evaluators.toDepth(maxDepth-1))
+						.relationships(MyRels.PARENT_OF, Direction.OUTGOING)
+						.evaluator( new Evaluator() {
+							@Override
+							public Evaluation evaluate(Path path) {
+								return path.endNode().hasRelationship(Direction.OUTGOING) ? Evaluation.EXCLUDE_AND_CONTINUE : Evaluation.INCLUDE_AND_CONTINUE;
+							}
+						});
+
+			iterator = unprocessedTraversal.traverse(startNode).nodes().iterator();
+
+			while (iterator.hasNext()) {
+				Node currNode = iterator.next();
+				String key = currNode.hasLabel(MyLabels.ROOT) ? "" : String.valueOf(currNode.getProperty("key"));
+				createChildRecords(tx, currNode.getId(), key, maxDepth);
 				traversedCnt++;
 			} //end of while
 
-			tx.success();
-			System.gc();
+			System.out.println();
 		} finally {
 			iterator.close();
 		} //end of try
 
 		return traversedCnt;
-	} //end of traverseBatch
+	} //end of createKeyTree
 
-	public long traverseAllWithCypher(long rootId) {
-		long nodeCnt = 0;
+	private void createChildRecords(Transaction tx, long parentId, String parentKey, int maxDepth) {
+		StringBuffer cqlStmt = new StringBuffer("MATCH (p) WHERE id(p) = " + parentId);
+		ArrayList<Map<String, Object>> resultList = new ArrayList<Map<String, Object>>();
+		for (char c : "abcdefghijklmnopqrstuvwxyz".toCharArray()) {
+			String key = parentKey + String.valueOf(c);
+			cqlStmt.append(" CREATE UNIQUE (p)-[:PARENT_OF]->(:KEY{ key:'" + key + "'})");
+		} //end of for
+		cqlStmt.append(" WITH p");
+		cqlStmt.append(" MATCH (p)-[:PARENT_OF]->(c) RETURN id(c), c.key");
 
-		System.out.print("Traversing (using Cypher)...");
-
-		long traversedCnt = 0;
-		while ((traversedCnt = traverseBatchWithCypher(rootId)) > 0) {
-			nodeCnt += traversedCnt;
-			System.out.println(nodeCnt + " nodes cyphered");
-		} //end of while
-
-		System.out.println(" Done!");
-
-		return nodeCnt;
-	} //end of traverseAllWithCypher
-
-	private long traverseBatchWithCypher(long rootId) {
-		long nodeCnt = 0;
-
-		try ( Transaction tx = this.graphDb.beginTx();Result result = this.graphDb.execute("MATCH (r:ROOT)-[:PARENT_OF*1..10]-(c) WHERE id(r) = " + rootId + " AND (c.processed = false OR c.processed IS NULL) RETURN c LIMIT 1000") ) {
-     	while (result.hasNext()) {
-				Map<String, Object> row = result.next();
-				Node n = (Node)row.get("c");
-				n.setProperty("processed", true);
-				nodeCnt++;
+		try (Result result = this.graphDb.execute(cqlStmt.toString()) ) {
+     	while ( result.hasNext() ){
+				resultList.add(result.next());
+				createdCnt++;
+				if (createdCnt % 1000 == 0) System.out.print("\r" + nf.format(createdCnt) + " nodes created");
      	} //end of while
      	tx.success();
-			System.gc();
+     	System.gc();
 		} //end of try
-		System.out.println("returning: " + nodeCnt);
 
-		return nodeCnt;
-	} //end of traverseBatchWithCypher
+		if (parentKey.length() + 1 < maxDepth) {
+			for (Map<String, Object> row : resultList) {
+				createChildRecords(tx, Long.parseLong(String.valueOf(row.get("id(c)"))), String.valueOf(row.get("c.key")), maxDepth);
+			} //end of for
+		} //end of if
+	} //end of createChildRecords
 
 	public long getAllNodeCnt() {
 		long nodeCnt = 0;
@@ -166,36 +186,6 @@ public class Neo4jAdapter {
 		return nodeCnt;
 	} //end of getProcessedCnt
 
-	public long getProcessedCnt2() {
-		long nodeCnt = 0;
-
-		try ( Transaction tx = this.graphDb.beginTx();Result result = this.graphDb.execute("MATCH (c:PROCESSED) RETURN c") ) {
-     	while (result.hasNext()) {
-				result.next();
-				nodeCnt++;
-				if (nodeCnt % 1000 == 0) System.gc(); // Run Garbage Collector every 1000 nodes
-     	} //end of while
-     	tx.success();
-		} //end of try
-
-		return nodeCnt;
-	} //end of getProcessedCnt2
-
-	@Deprecated public long getUnprocessedCnt(long rootId) {
-		long nodeCnt = 0;
-
-		try ( Transaction tx = this.graphDb.beginTx();Result result = this.graphDb.execute("MATCH (r:ROOT)-[:PARENT_OF*1..99]-(c) WHERE id(r) = " + rootId + " AND (c.processed = false OR c.processed IS NULL) RETURN c") ) {
-     	while (result.hasNext()) {
-				result.next();
-				nodeCnt++;
-				if (nodeCnt % 1000 == 0) System.gc(); // Run Garbage Collector every 1000 nodes
-     	} //end of while
-     	tx.success();
-		} //end of try
-
-		return nodeCnt;
-	} //end of getUnprocessedCnt
-
 	public Node findOrCreateNode(Label label, String key, String value) {
 		Node returnNode = null;
 
@@ -229,6 +219,7 @@ public class Neo4jAdapter {
 		return nodeId;
 	} //end of findOrCreateNodeId
 
+	//This function goes through alphabet list and will fill in the gaps
 	public void createAlphaTree(Node parentNode, int maxDepth) {
 		//defghijklmnopqrstuvwxyz
 		for (char c : "abcdefghijklmnopqrstuvwxyz".toCharArray()) {
@@ -267,35 +258,6 @@ public class Neo4jAdapter {
 		} //end of for
 	} //end of createAlphaTree
 
-	public void createChildRecords(long parentId, int maxDepth) {
-		createChildRecords(parentId, "", maxDepth);
-	} //end of createChildRecords
-
-	private void createChildRecords(long parentId, String parentKey, int maxDepth) {
-		StringBuffer cqlStmt = new StringBuffer("MATCH (p) WHERE id(p) = " + parentId);
-		ArrayList<Map<String, Object>> resultList = new ArrayList<Map<String, Object>>();
-		for (char c : "abcdefghijklmnopqrstuvwxyz".toCharArray()) {
-			String key = parentKey + String.valueOf(c);
-			cqlStmt.append(" CREATE UNIQUE (p)-[:PARENT_OF]->(:KEY{ key:'" + key + "'})");
-		} //end of for
-		cqlStmt.append(" WITH p");
-		cqlStmt.append(" MATCH (p)-[:PARENT_OF]->(c) RETURN id(c), c.key");
-
-		try ( Transaction tx = this.graphDb.beginTx();Result result = this.graphDb.execute(cqlStmt.toString()) ) {
-     	while ( result.hasNext() ){
-				resultList.add(result.next());
-     	} //end of while
-     	tx.success();
-     	System.gc();
-		} //end of try
-
-		if (parentKey.length() + 1 < maxDepth) {
-			for (Map<String, Object> row : resultList) {
-				createChildRecords(Long.parseLong(String.valueOf(row.get("id(c)"))), String.valueOf(row.get("c.key")), maxDepth);
-			} //end of for
-		} //end of if
-	} //end of createChildRecords
-
 	private void registerShutdownHook(final GraphDatabaseService graphDb) {
 		// Registers a shutdown hook for the Neo4j instance so that it
 		// shuts down nicely when the VM exits (even if you "Ctrl-C" the
@@ -307,6 +269,80 @@ public class Neo4jAdapter {
 			} //end of run
 		});
 	} //end of registerShutdownHook
+
+
+
+
+
+
+
+//	public void createChildRecords(long parentId, int maxDepth) {
+//		createChildRecords(parentId, "", maxDepth);
+//	} //end of createChildRecords
+
+	public long traverseAllWithCypher(long rootId) {
+		long nodeCnt = 0;
+
+		System.out.print("Traversing (using Cypher)...");
+
+		long traversedCnt = 0;
+		while ((traversedCnt = traverseBatchWithCypher(rootId)) > 0) {
+			nodeCnt += traversedCnt;
+			System.out.println(nodeCnt + " nodes cyphered");
+		} //end of while
+
+		System.out.println(" Done!");
+
+		return nodeCnt;
+	} //end of traverseAllWithCypher
+
+	private long traverseBatchWithCypher(long rootId) {
+		long nodeCnt = 0;
+
+		try ( Transaction tx = this.graphDb.beginTx();Result result = this.graphDb.execute("MATCH (r:ROOT)-[:PARENT_OF*1..10]-(c) WHERE id(r) = " + rootId + " AND (c.processed = false OR c.processed IS NULL) RETURN c LIMIT 1000") ) {
+     	while (result.hasNext()) {
+				Map<String, Object> row = result.next();
+				Node n = (Node)row.get("c");
+				n.setProperty("processed", true);
+				nodeCnt++;
+     	} //end of while
+     	tx.success();
+			System.gc();
+		} //end of try
+		System.out.println("returning: " + nodeCnt);
+
+		return nodeCnt;
+	} //end of traverseBatchWithCypher
+
+	@Deprecated public long getProcessedCnt2() {
+		long nodeCnt = 0;
+
+		try ( Transaction tx = this.graphDb.beginTx();Result result = this.graphDb.execute("MATCH (c:PROCESSED) RETURN c") ) {
+     	while (result.hasNext()) {
+				result.next();
+				nodeCnt++;
+				if (nodeCnt % 1000 == 0) System.gc(); // Run Garbage Collector every 1000 nodes
+     	} //end of while
+     	tx.success();
+		} //end of try
+
+		return nodeCnt;
+	} //end of getProcessedCnt2
+
+	@Deprecated public long getUnprocessedCnt(long rootId) {
+		long nodeCnt = 0;
+
+		try ( Transaction tx = this.graphDb.beginTx();Result result = this.graphDb.execute("MATCH (r:ROOT)-[:PARENT_OF*1..99]-(c) WHERE id(r) = " + rootId + " AND (c.processed = false OR c.processed IS NULL) RETURN c") ) {
+     	while (result.hasNext()) {
+				result.next();
+				nodeCnt++;
+				if (nodeCnt % 1000 == 0) System.gc(); // Run Garbage Collector every 1000 nodes
+     	} //end of while
+     	tx.success();
+		} //end of try
+
+		return nodeCnt;
+	} //end of getUnprocessedCnt
 
 	@Deprecated private int getAllRelCnt() {
 		int relCnt = 0;
