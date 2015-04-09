@@ -86,7 +86,7 @@ public class App {
 
 		// Create child records up to depth x
 		//neo4jDb.createChildRecords(rootId, 3);
-		neo4jDb.createKeyTree(4);
+		neo4jDb.createKeyTree(5);
 
 		// Traverse all nodes
 //		neo4jDb.traverseAll();
