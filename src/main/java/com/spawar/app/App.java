@@ -42,7 +42,8 @@ public class App {
 
 	public static void main(String[] args) {
 		//testAccumuloGraph();
-		testNeo4jAdapter();
+		//testNeo4jAdapter();
+		testNeo4jRestAdapter();
 	} //end of main
 
 /*
@@ -65,12 +66,26 @@ public class App {
 		AccumuloGraph graph = new AccumuloGraph(cfg2);
 	} //end of testAccumuloGraph
 */
+	private static void testNeo4jRestAdapter() {
+		Neo4jAdapter neo4jDb = new Neo4jAdapter();
+		NumberFormat nf = new DecimalFormat("###,###,##0");
+
+		long startTime = System.nanoTime();
+
+		System.out.println("Rest Nodes (STARTUP): " + neo4jDb.getRestNodeCnt() + "\n");
+		neo4jDb.restCreateTree();
+		System.out.println("\n" + "Rest Nodes (SHUTDOWN): " + neo4jDb.getRestNodeCnt());
+
+		long elapsedTime = System.nanoTime() - startTime;
+		System.out.println("Elapsed Time: " + nf.format(elapsedTime/(long)1000000000) + " seconds");
+
+	} //end of testNeo4jRestAdapter
 
 	private static void testNeo4jAdapter() {
 		Neo4jAdapter neo4jDb = new Neo4jAdapter("C:/db_neo4j/keytree.graphdb");
 		NumberFormat nf = new DecimalFormat("###,###,##0");
 
-		System.out.println("Total nodes at startup: " + nf.format(neo4jDb.getAllNodeCnt()));
+		//System.out.println("Total nodes at startup: " + nf.format(neo4jDb.getAllNodeCnt()));
 		System.out.println("Total nodes PROCESSED at startup: " + nf.format(neo4jDb.getProcessedCnt()));
 
 //		long startTime2 = System.nanoTime();
@@ -96,6 +111,6 @@ public class App {
 
 
 		System.out.println("Total nodes PROCESSED at shutdown: " + nf.format(neo4jDb.getProcessedCnt()));
-		System.out.println("Total nodes at shutdown: " + nf.format(neo4jDb.getAllNodeCnt()));
+		//System.out.println("Total nodes at shutdown: " + nf.format(neo4jDb.getAllNodeCnt()));
 	} //end of testNeo4jAdapter
 } //end of class

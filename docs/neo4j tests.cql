@@ -2,15 +2,28 @@ java -classpath "C:\Program Files (x86)\Neo4j Community\bin\neo4j-desktop-2.2.0.
 
 CREATE (root { name: 'root' }) return root;
 
+MATCH (root:ROOT) CREATE UNIQUE (root) RETURN root;
+
+MERGE (r:ROOT {name: 'root'}) RETURN r;
+
 MATCH (a:Node { name: 'k4' }), (b:Node { name: 'a' })
 CREATE (a)-[r:PARENT_OF]->(b)
 RETURN r;
 
+#count all
+START n=node(*) RETURN COUNT(n) AS total
+
+#childless
+MATCH (r:ROOT)-[:PARENT_OF*0..3]->(c) WHERE NOT (c)-[:PARENT_OF]->() RETURN id(c) AS id, c.key AS key LIMIT 10;
+
 # Delete all nodes
 START n = node(*)
 OPTIONAL MATCH n-[r]-()
-WHERE (ID(n)>0 AND ID(n)<10000)
+WHERE (ID(n)>0 AND ID(n)<1000)
 DELETE n, r;
+
+START n = node(*) OPTIONAL MATCH n-[r]-() WHERE (ID(n)>0 AND ID(n)<10000) DELETE n, r;
+
 
 CREATE (root { name: 'root' })
 RETURN root;
@@ -58,6 +71,13 @@ WITH c1, c2
 MATCH (n)
 MERGE (c {name: 'c' }) WHERE ID(c) = 1 ON MATCH SET c += { processed: TRUE } RETURN c;
 
+MATCH (ROOT{name: 'root'})-[:PARENT_OF]->(c:KEY)-[:PARENT_OF]->() return c;
+MATCH (n:Somelabel) WHERE NOT (n)-[:BELONGS_TO]->() RETURN n;
+
+#Get Childless records
+MATCH (r:ROOT)-[:PARENT_OF*0..3]->(c:KEY) WHERE NOT (c)-[:PARENT_OF]->() RETURN c;
+MATCH (r:ROOT)-[:PARENT_OF*0..4]->(c:KEY) WHERE NOT (c)-[:PARENT_OF]->() RETURN c;
+MATCH (r:ROOT)-[:PARENT_OF*0..5]->(c:KEY) WHERE NOT (c)-[:PARENT_OF]->() RETURN c;
 
 MATCH ({name: 'root'})-[:PARENT_OF]->(c) return c;
 
@@ -69,6 +89,7 @@ MATCH (r:ROOT{name: 'k4'}) return r;
 MATCH (ROOT{name: 'root'})-[:PARENT_OF]->(c:KEY) return c;
 MATCH (ROOT{name: 'k4'})-[:PARENT_OF]->(c:KEY)-[:PARENT_OF]->(gc:KEY) return gc;
 
+MATCH (ROOT{name: 'root'})-[:PARENT_OF*1..5]->(c:KEY) return c LIMIT 1000;
 
 MATCH (group { name: "root" })-[:contains]->(parent)-[:PARENT_OF]->(child)
 WITH group, parent, child

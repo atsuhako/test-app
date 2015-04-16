@@ -17,9 +17,17 @@ import org.neo4j.graphdb.ResourceIterator;
 import org.neo4j.tooling.GlobalGraphOperations;
 import org.neo4j.graphdb.Direction;
 import org.neo4j.graphdb.Result;
-
 import java.text.NumberFormat;
 import java.text.DecimalFormat;
+
+import java.util.Collections;
+
+import org.neo4j.rest.graphdb.RestGraphDatabase;
+import org.neo4j.rest.graphdb.RestAPI;
+import org.neo4j.rest.graphdb.RestAPIFacade;
+import org.neo4j.rest.graphdb.query.QueryEngine;
+import org.neo4j.rest.graphdb.query.RestCypherQueryEngine;
+import org.neo4j.rest.graphdb.util.QueryResult;
 
 import org.neo4j.graphdb.traversal.TraversalDescription;
 import org.neo4j.graphdb.traversal.Evaluator;
@@ -40,6 +48,104 @@ public class Neo4jAdapter {
 	private int createdCnt = 0;
 	private NumberFormat nf = new DecimalFormat("###,###,##0");
 	private int bufferCnt = 0;
+
+	private final String SERVER_ROOT_URI = "http://localhost:7474";
+	private RestAPI restDb = null;
+
+	public Neo4jAdapter() {
+		//REST
+		this.restDb = new RestAPIFacade(this.SERVER_ROOT_URI + "/db/data", "neo4j", "password");
+	} //end of Neo4jAdapter
+
+	public long getRestNodeCnt() {
+		String cqlStmt = "START n=node(*) RETURN COUNT(n) AS total";
+		long nodeCnt = 0;
+
+		QueryEngine engine = new RestCypherQueryEngine(this.restDb);
+		QueryResult<Map<String, Object>> result = engine.query(cqlStmt, Collections.EMPTY_MAP);
+		Iterator<Map<String, Object>> iterator = result.iterator();
+		if (iterator.hasNext()) {
+			Map<String, Object> row = iterator.next();
+			nodeCnt = Long.parseLong(String.valueOf(row.get("total")));
+		} //end of if
+
+		return nodeCnt;
+	} //end of getRestNodeCnt
+
+	private long restFindOrCreateRootId() {
+		String cqlStmt = "MERGE (r:ROOT {name: 'root'}) RETURN id(r) AS id";
+		long id = -1;
+
+		QueryEngine engine = new RestCypherQueryEngine(this.restDb);
+		QueryResult<Map<String, Object>> result = engine.query(cqlStmt, Collections.EMPTY_MAP);
+		Iterator<Map<String, Object>> iterator = result.iterator();
+		if (iterator.hasNext()) {
+			Map<String, Object> row = iterator.next();
+			id = Long.parseLong(String.valueOf(row.get("id")));
+		} //end of if
+
+		return id;
+	} //end of restFindOrCreateRootId
+
+private long batchCnt = 0;
+
+	public void restCreateTree() {
+		long rootId = restFindOrCreateRootId();
+		System.out.println("Root ID: " + rootId);
+
+		int maxDepth = 5;
+
+//MATCH (r:ROOT)-[:PARENT_OF*0..2]->(c) WHERE NOT (c)-[:PARENT_OF]->() RETURN id(c) AS id, c.key AS key LIMIT 10;
+
+//		restCreateChildRecords(rootId, "", 5);
+		String cqlStmt = new String("MATCH (r:ROOT)-[:PARENT_OF*0.." + (maxDepth-1) + "]->(c) WHERE NOT (c)-[:PARENT_OF]->() RETURN id(c) AS id, c.key AS key LIMIT 1000");
+
+		do {
+			batchCnt = 0;
+			ArrayList<Map<String, Object>> resultList = new ArrayList<Map<String, Object>>();
+			QueryEngine engine = new RestCypherQueryEngine(this.restDb);
+			QueryResult<Map<String, Object>> result = engine.query(cqlStmt, Collections.EMPTY_MAP);
+			Iterator<Map<String, Object>> iterator = result.iterator();
+			while (iterator.hasNext()) {
+				Map<String, Object> row = iterator.next();
+				long id = Long.parseLong(String.valueOf(row.get("id")));
+				String key = String.valueOf(row.get("key"));
+				if (key == null || key.equals("null")) key = "";
+				restCreateChildRecords(id, key, maxDepth);
+			} //end of while
+		} while (batchCnt > 0);
+	} //end of restCreateTree
+
+
+	private void restCreateChildRecords(long parentId, String parentKey, int maxDepth) {
+		StringBuffer cqlStmt = new StringBuffer("MATCH (p) WHERE id(p) = " + parentId);
+		ArrayList<Map<String, Object>> resultList = new ArrayList<Map<String, Object>>();
+
+		for (char c : "abcdefghijklmnopqrstuvwxyz".toCharArray()) {
+			String key = parentKey + String.valueOf(c);
+			cqlStmt.append(" CREATE UNIQUE (p)-[:PARENT_OF]->(:KEY{ key:'" + key + "'})");
+		} //end of for
+		cqlStmt.append(" WITH p");
+		cqlStmt.append(" MATCH (p)-[:PARENT_OF]->(c) RETURN id(c), c.key");
+
+		QueryEngine engine = new RestCypherQueryEngine(this.restDb);
+		QueryResult<Map<String, Object>> result = engine.query(cqlStmt.toString(), Collections.EMPTY_MAP);
+		Iterator<Map<String, Object>> iterator = result.iterator();
+		while (iterator.hasNext()) {
+			resultList.add(iterator.next());
+			createdCnt++;
+			batchCnt++;
+		} //end of while
+
+		System.out.print("\r" + "REST Nodes Created: " + createdCnt);
+
+		if (parentKey.length() + 1 < maxDepth) {
+			for (Map<String, Object> row : resultList) {
+				restCreateChildRecords(Long.parseLong(String.valueOf(row.get("id(c)"))), String.valueOf(row.get("c.key")), maxDepth);
+			} //end of for
+		} //end of if
+	} //end of restCreateChildRecords
+
 
 	public Neo4jAdapter(String filePath) {
 		this.graphDb = new GraphDatabaseFactory().newEmbeddedDatabase(filePath);
