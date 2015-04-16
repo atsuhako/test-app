@@ -1,0 +1,1 @@
+java -server -Xmx512M -Xms256M -XX:+UseConcMarkSweepGC -jar target\test-app-1.0-SNAPSHOT-jar-with-dependencies.jar
