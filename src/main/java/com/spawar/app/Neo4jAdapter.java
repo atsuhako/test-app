@@ -132,7 +132,7 @@ public class Neo4jAdapter {
 //MATCH (r:ROOT)-[:PARENT_OF*0..2]->(c) WHERE NOT (c)-[:PARENT_OF]->() RETURN id(c) AS id, c.key AS key LIMIT 10;
 
 //		restCreateChildRecords(rootId, "", 5);
-		String cqlStmt = new String("MATCH (r:ROOT)-[:PARENT_OF*0.." + (maxDepth-1) + "]->(c) WHERE NOT (c)-[:PARENT_OF]->() RETURN id(c) AS id, c.key AS key LIMIT 1000");
+		String cqlStmt = new String("MATCH (r:ROOT)-[:PARENT_OF*0.." + (maxDepth-1) + "]->(c) WHERE NOT (c)-[:PARENT_OF]->() RETURN c LIMIT 1000");
 
 		do {
 			batchCnt = 0;
@@ -142,10 +142,9 @@ public class Neo4jAdapter {
 			Iterator<Map<String, Object>> iterator = result.iterator();
 			while (iterator.hasNext()) {
 				Map<String, Object> row = iterator.next();
-				long id = Long.parseLong(String.valueOf(row.get("id")));
-				String key = String.valueOf(row.get("key"));
-				if (key == null || key.equals("null")) key = "";
-				restCreateChildRecords(id, key, maxDepth);
+				RestNode c = (RestNode) row.get("c");
+				String key = c.hasProperty("key") ? String.valueOf(c.getProperty("key")) : "";
+				restCreateChildRecords(c.getId(), key, maxDepth);
 			} //end of while
 		} while (batchCnt > 0);
 	} //end of restCreateTree
