@@ -72,9 +72,14 @@ public class App {
 
 		long startTime = System.nanoTime();
 
-		System.out.println("Rest Nodes (STARTUP): " + neo4jDb.getRestNodeCnt() + "\n");
+		System.out.println("Rest Nodes (STARTUP): " + neo4jDb.getRestNodeCnt() );
+		System.out.println("Unprocessed Nodes (STARTUP): " + neo4jDb.getRestUnprocessedCnt() );
+
 		neo4jDb.restCreateTree();
-		System.out.println("\n" + "Rest Nodes (SHUTDOWN): " + neo4jDb.getRestNodeCnt());
+//		neo4jDb.restTraverseTree();
+
+		System.out.println("\n" + "Unprocessed Nodes (SHUTDOWN): " + neo4jDb.getRestUnprocessedCnt() );
+		System.out.println("Rest Nodes (SHUTDOWN): " + neo4jDb.getRestNodeCnt());
 
 		long elapsedTime = System.nanoTime() - startTime;
 		System.out.println("Elapsed Time: " + nf.format(elapsedTime/(long)1000000000) + " seconds");

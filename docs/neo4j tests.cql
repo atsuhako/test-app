@@ -152,3 +152,7 @@ MATCH ({processed: false}) RETURN count(1);
  match (n:ROOT{name:"k4"})-[:PARENT_OF]-c return c
 
  CREATE INDEX ON :User(EmailAddress);
+ 
+ MATCH (n) WHERE id(n) = 5460261 RETURN n;
+ 
+ MATCH (n:UNPROCESSED) RETURN n LIMIT 1000;

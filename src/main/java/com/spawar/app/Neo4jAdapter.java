@@ -2,6 +2,7 @@ package com.spawar.app;
 
 import java.util.Iterator;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.ArrayList;
 
@@ -22,9 +23,15 @@ import java.text.DecimalFormat;
 
 import java.util.Collections;
 
+import org.neo4j.rest.graphdb.batch.BatchRestAPI;
+import org.neo4j.rest.graphdb.batch.BatchCallback;
 import org.neo4j.rest.graphdb.RestGraphDatabase;
 import org.neo4j.rest.graphdb.RestAPI;
+import org.neo4j.rest.graphdb.entity.RestNode;
 import org.neo4j.rest.graphdb.RestAPIFacade;
+import org.neo4j.rest.graphdb.batch.RestOperations;
+import org.neo4j.rest.graphdb.batch.RestOperations.RestOperation;
+
 import org.neo4j.rest.graphdb.query.QueryEngine;
 import org.neo4j.rest.graphdb.query.RestCypherQueryEngine;
 import org.neo4j.rest.graphdb.util.QueryResult;
@@ -72,6 +79,21 @@ public class Neo4jAdapter {
 		return nodeCnt;
 	} //end of getRestNodeCnt
 
+	public long getRestUnprocessedCnt() {
+		String cqlStmt = "MATCH (n:UNPROCESSED) RETURN COUNT(n) AS total";
+		long nodeCnt = 0;
+
+		QueryEngine engine = new RestCypherQueryEngine(this.restDb);
+		QueryResult<Map<String, Object>> result = engine.query(cqlStmt, Collections.EMPTY_MAP);
+		Iterator<Map<String, Object>> iterator = result.iterator();
+		if (iterator.hasNext()) {
+			Map<String, Object> row = iterator.next();
+			nodeCnt = Long.parseLong(String.valueOf(row.get("total")));
+		} //end of if
+
+		return nodeCnt;
+	} //end of getRestUnprocessedCnt
+
 	private long restFindOrCreateRootId() {
 		String cqlStmt = "MERGE (r:ROOT {name: 'root'}) RETURN id(r) AS id";
 		long id = -1;
@@ -87,7 +109,19 @@ public class Neo4jAdapter {
 		return id;
 	} //end of restFindOrCreateRootId
 
-private long batchCnt = 0;
+	private long batchCnt = 0;
+
+	public void restTestBatch() {
+		ArrayList<Long> ids = new ArrayList<Long>();
+		ids.add((long)5460261);
+		ids.add((long)5460262);
+		ids.add((long)5460263);
+		ids.add((long)5460264);
+		ids.add((long)5460265);
+		ids.add((long)5460266);
+		ids.add((long)5460288);
+		this.restDb.executeBatch(new Process(ids));
+	} //end of restTestBatch
 
 	public void restCreateTree() {
 		long rootId = restFindOrCreateRootId();
@@ -116,6 +150,26 @@ private long batchCnt = 0;
 		} while (batchCnt > 0);
 	} //end of restCreateTree
 
+	public void restTraverseTree() {
+		String cqlStmt = new String("MATCH (n:UNPROCESSED) RETURN n LIMIT 1000");
+
+		do {
+			batchCnt = 0;
+			ArrayList<Map<String, Object>> resultList = new ArrayList<Map<String, Object>>();
+			QueryEngine engine = new RestCypherQueryEngine(this.restDb);
+			QueryResult<Map<String, Object>> result = engine.query(cqlStmt, Collections.EMPTY_MAP);
+			Iterator<Map<String, Object>> iterator = result.iterator();
+			ArrayList<Long> idList = new ArrayList<Long>();
+			while (iterator.hasNext()) {
+				Map<String, Object> row = iterator.next();
+				RestNode n = (RestNode)row.get("n");
+//				System.out.println(n.getId() + ": " + n.getProperty("key"));
+				idList.add(n.getId());
+				batchCnt++;
+			} //end of while
+			this.restDb.executeBatch(new Process(idList));
+		} while (batchCnt > 0);
+	} //end of restTraverseTree
 
 	private void restCreateChildRecords(long parentId, String parentKey, int maxDepth) {
 		StringBuffer cqlStmt = new StringBuffer("MATCH (p) WHERE id(p) = " + parentId);
@@ -123,7 +177,7 @@ private long batchCnt = 0;
 
 		for (char c : "abcdefghijklmnopqrstuvwxyz".toCharArray()) {
 			String key = parentKey + String.valueOf(c);
-			cqlStmt.append(" CREATE UNIQUE (p)-[:PARENT_OF]->(:KEY{ key:'" + key + "'})");
+			cqlStmt.append(" CREATE UNIQUE (p)-[:PARENT_OF]->(:KEY:UNPROCESSED{ key:'" + key + "'})");
 		} //end of for
 		cqlStmt.append(" WITH p");
 		cqlStmt.append(" MATCH (p)-[:PARENT_OF]->(c) RETURN id(c), c.key");
@@ -550,4 +604,23 @@ private long batchCnt = 0;
 			if (key.length() < maxDepth) createChildRecords_universal_search(childNode, maxDepth);
 		} //end of for
 	} //end of createChildRecords_universal_search
+
+
+static class Process implements BatchCallback<Object> {
+	private static final String QUERY = "MATCH (n) WHERE id(n) = {id} REMOVE n:UNPROCESSED;";
+	private ArrayList<Long> ids;
+	Process(final ArrayList<Long> ids) {
+		this.ids = ids;
+	}
+
+	@Override
+	public Object recordBatch(final RestAPI restApi) {
+		for (Long id : ids) {
+			HashMap<String, Object> param = new HashMap<String, Object>();
+			param.put("id", id);
+			restApi.query(QUERY, param);
+		}
+		return null;
+	}
+}
 } //end of class
