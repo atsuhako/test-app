@@ -61,7 +61,7 @@ public class Neo4jAdapter {
 
 	public Neo4jAdapter() {
 		//REST
-		this.restDb = new RestAPIFacade(this.SERVER_ROOT_URI + "/db/data", "neo4j", "password");
+		this.restDb = new RestAPIFacade(this.SERVER_ROOT_URI + "/db/data");
 	} //end of Neo4jAdapter
 
 	public long getRestNodeCnt() {
