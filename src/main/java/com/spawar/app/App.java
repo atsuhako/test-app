@@ -55,10 +55,17 @@ public class App {
 
 		System.out.println("encipher Beaufort: " + encipherBeaufort("defend the east wall of the castle", "fortification"));
 		System.out.println("decipher Beaufort: " + decipherBeaufort("CKMPVC PVW PIWU JOGI UA PVW RIWUUK", "fortification"));
+		System.out.println();
+
+		System.out.println("encipher Autokey: " + encipherAutokey("defend the east wall of the castle", "fortification"));
+		System.out.println("decipher Autokey: " + decipherAutokey("ISWXVIBJEXIGGZEQPBIMOIGAKMHE", "fortification"));
+		System.out.println();
 
 		System.out.println("decipher Beaufort via Vigenere: " + encipherVigenere(invert("CKMPVC PVW PIWU JOGI UA PVW RIWUUK"), "fortification"));
 		System.out.println("decipher Beaufort via Vigenere: " + decipherVigenere(invert("CKMPVC PVW PIWU JOGI UA PVW RIWUUK"), "fortification"));
 		System.out.println();
+
+
 
 		System.out.println("encipher K1: " + encipherKryptos("BETWEEN SUBTLE SHADING AND THE ABSENCE OF LIGHT LIES THE NUANCE OF IQLUSION", "Palimpsest"));
 		System.out.println("decipher K1: " + decipherKryptos("EMUFPHZ LRFAXY USDJKZL DKR NSH GNFIVJY QT QUXQB QVYU VLL TREVJY QT MKYRDMFD", "Palimpsest"));
@@ -155,6 +162,44 @@ public class App {
 
 		return plainText.toString();
 	} //end of decipherKryptos
+
+	protected static final String encipherAutokey(String plainText, String key) {
+		StringBuffer cipherText = new StringBuffer();
+		key = key.toUpperCase();
+
+		int i = 0;
+		for (char c : plainText.toUpperCase().toCharArray()) {
+			if (alphabet.indexOf(c) >= 0) {
+				cipherText.append(alphabet.charAt((alphabet.indexOf(c) + alphabet.indexOf(key.charAt(i % key.length()))) % 26));
+				key = key + c;
+				i++;
+			} else {
+				cipherText.append(c);
+			} //end of else
+		} // end of for
+
+		return cipherText.toString();
+	} //end of encipherAutokey
+
+	protected static final String decipherAutokey(String cipherText, String key) {
+		StringBuffer plainText = new StringBuffer();
+
+		key = key.toUpperCase();
+
+		int i = 0;
+		for (char c : cipherText.toUpperCase().toCharArray()) {
+			if (alphabet.indexOf(c) >= 0) {
+				char letter = alphabet.charAt((26 + alphabet.indexOf(c) - alphabet.indexOf(key.charAt(i % key.length()))) % 26);
+				plainText.append(letter);
+				key = key + letter;
+				i++;
+			} else {
+				plainText.append(c);
+			} //end of else
+		} //end of for
+
+		return plainText.toString();
+	} //end of decipherAutokey
 
 
 	protected static final String encipherVigenere(String plainText, String key) {
